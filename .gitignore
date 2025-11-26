@@ -1,1 +1,15 @@
 .vscode
+~*.*
+/build/
+/debug/
+/dist/
+/disassembly/
+/.generated_files/
+/nbproject/private/
+/nbproject/*.mk
+/nbproject/*.bash
+/nbproject/Makefile-genesis.properties
+/nbproject/queuelogs/
+*mc3.bak*
+*.bak*/
+*.zip
