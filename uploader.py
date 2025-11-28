@@ -16,7 +16,43 @@
 	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
+from io import TextIOWrapper
 import os
+
+publicConfigPath = "nbproject/configurations.xml"
+""" public configurations file for project """
+
+privateConfigPath = "nbproject/private/configurations.xml"
+""" private configurations file for user """
+
+makeImpPath = "nbproject/Makefile-impl.mk"
+""" configuration for compiling project """
+
+def openReadFile(path: str) -> TextIOWrapper:
+	"""
+	Opens path file in read mode\n
+	:param	path file path to open\n
+	:return open file
+	"""
+
+	if not os.path.exists(path):
+		print("Path: '" + path + "' doesn't exist!")
+		exit(-1)
+	
+	return open(path, "r")
+
+def openWriteFile(path: str) -> TextIOWrapper:
+	"""
+	Opens path file in write mode\n
+	:param	path file path to open\n
+	:return open file
+	"""
+
+	if not os.path.exists(path):
+		print("Path: '" + path + "' doesn't exist!")
+		exit(-1)
+	
+	return open(path, "w")
 
 def listConfigs() -> list[str]:
 	"""
@@ -24,14 +60,7 @@ def listConfigs() -> list[str]:
 	:return list of configuration names
 	"""
 
-	configPath = "nbproject/configurations.xml"
-
-	if not os.path.exists(configPath):
-		print("Configuration path: '" + configPath + "' doesn't exist!")
-		exit(-1)
-	
-	configFile = open(configPath, "r")
-
+	configFile = openReadFile(publicConfigPath)
 	configNames:list[str] = []
 
 	try:
@@ -45,12 +74,38 @@ def listConfigs() -> list[str]:
 
 				configNames.append(line[startIndex:endIndex])
 
-		configFile.close()
-
 	except (BlockingIOError, OSError, ValueError):
-		print("Failed to read lines for " + configPath)
+		print("Failed to read lines for " + publicConfigPath)
+	
+	configFile.close()
 
 	return configNames
+
+def getConfigIndex() -> int:
+	"""
+	Gets index of current configuration\n
+	:return	configuration index
+	"""
+
+	configFile = openReadFile(privateConfigPath)
+
+	try:
+		lines = configFile.readlines()
+
+		for line in lines:
+			if line.find("<defaultConf>") != -1:
+				startIndex = line.find(">") + 1
+				endIndex = line.find("<", startIndex)
+				configFile.close()
+				return int(line[startIndex:endIndex])
+
+	except (BlockingIOError, OSError, ValueError):
+		print("Failed to read lines for " + privateConfigPath)
+	
+	configFile.close()
+	exit(-1)
+
+	return 0
 
 def getConfig() -> str:
 	"""
@@ -58,7 +113,7 @@ def getConfig() -> str:
 	:return	configuration name
 	"""
 
-	return ""
+	return listConfigs()[getConfigIndex()]
 
 def writeConfig(path: str, keyStr: str, endStr: str, fillerStr: str):
 	"""
@@ -69,7 +124,7 @@ def writeConfig(path: str, keyStr: str, endStr: str, fillerStr: str):
 	:param fillerStr	str to replace file
 	"""
 
-	configurationFile = open(path, "r")
+	configurationFile = openReadFile(path)
 	configurationLines = configurationFile.readlines()
 	i = 0
 
@@ -82,7 +137,7 @@ def writeConfig(path: str, keyStr: str, endStr: str, fillerStr: str):
 		i += 1
 
 	configurationFile.close()
-	configurationFile = open(path, "w")
+	configurationFile = openWriteFile(path)
 	i = 0
 
 	# writes original and modified lines
@@ -114,15 +169,43 @@ def setConfig():
 		except:
 			next
 
-	writeConfig("nbproject/private/configurations.xml", "<defaultConf>", "<", str(chosenIndex))
-	writeConfig("nbproject/Makefile-impl.mk", "DEFAULTCONF=", "\n", configs[chosenIndex])
+	writeConfig(privateConfigPath, "<defaultConf>", "<", str(chosenIndex))
+	writeConfig(makeImpPath, "DEFAULTCONF=", "\n", configs[chosenIndex])
 
 def getBoard() -> str:
 	"""
 	Gets board selected for configuration\n
 	:return name of board
 	"""
-	return "ATmega328P"
+
+	configFile = openReadFile(publicConfigPath)
+
+	prevConfigName = ""
+	configName = getConfig()
+
+	try:
+		lines = configFile.readlines()
+
+		for line in lines:
+
+			# gets selected config
+			if line.find("<conf name=") != -1:
+				startIndex = line.find("\"") + 1
+				endIndex = line.find("\"", startIndex)
+				prevConfigName = line[startIndex:endIndex]
+			
+			# gets selected device
+			if line.find("<targetDevice>") != -1 and prevConfigName == configName:
+				startIndex = line.find(">") + 1
+				endIndex = line.find("<", startIndex)
+				return line[startIndex:endIndex]
+
+	except (BlockingIOError, OSError, ValueError):
+		print("Failed to read lines for " + publicConfigPath)
+	
+	configFile.close()
+
+	return ""
 
 def getPort() -> str:
 	"""
@@ -132,19 +215,12 @@ def getPort() -> str:
 	#ls /dev/tty*
 	return "/dev/ttyACM0"
 
-def getBuildPath() -> str:
-	"""
-	Gets path for build files\n
-	:return build path
-	"""
-	return "dist/default/production/"
-
 def uploadApp():
 	"""
 	Uploads application to target board
 	"""
 	os.system("make")
-	os.system("avrdude -p " + getBoard() + " -c arduino -P " + getPort() + " -U flash:w:" + getBuildPath() + "AVR.production.hex:i")
+	os.system("avrdude -p " + getBoard() + " -c arduino -P " + getPort() + " -U flash:w:dist/" + getConfig() + "/production/AVR.production.hex:i")
 
 if __name__ == '__main__':
 	#uploadApp()
