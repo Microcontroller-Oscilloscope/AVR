@@ -18,6 +18,9 @@
 
 from io import TextIOWrapper
 import os
+import platform
+import subprocess
+import sys
 
 publicConfigPath = "nbproject/configurations.xml"
 """ public configurations file for project """
@@ -161,13 +164,14 @@ def setConfig():
 	
 	chosenIndex: int
 
-	while True:
-		try:
-			chosenIndex = int(input(""))
-			if chosenIndex >= 0 and chosenIndex < len(configs):
-				break
-		except:
-			next
+	try:
+		chosenIndex = int(input(""))
+		if chosenIndex < 0 or chosenIndex >= len(configs):
+			print("Invalid input")
+			return
+	except:
+		print("Invalid input")
+		return
 
 	writeConfig(privateConfigPath, "<defaultConf>", "<", str(chosenIndex))
 	writeConfig(makeImpPath, "DEFAULTCONF=", "\n", configs[chosenIndex])
@@ -207,21 +211,84 @@ def getBoard() -> str:
 
 	return ""
 
-def getPort() -> str:
+def getPorts() -> list[str]:
 	"""
 	Gets port of connected board\n
 	:return port name
 	"""
-	#ls /dev/tty*
-	return "/dev/ttyACM0"
+
+	command = ""
+	excludeStr: list[str] = []
+	excludeExact: list[str] = ["\n"]
+
+	if platform.system() == "Linux":
+		command = "ls /dev/tty*"
+
+		# Linux excludes
+		excludeStr.append("ttyS")
+		excludeStr.append("ttyprintk")
+		for i in range(10):
+			excludeStr.append("tty" + str(i))
+		
+		excludeExact.append("/dev/tty")
+	# TODO: add more operating systems
+	else:
+		print("OS not supported, exiting...")
+		exit(-1)
+	
+	allPorts = subprocess.check_output(command, shell=True, text=True).splitlines()
+	ports: list[str] = []
+
+	for port in allPorts:
+		
+		validPort = True
+
+		# checks if port is valid
+		for excStr in excludeStr:
+			if port.find(excStr) != -1:
+				validPort = False
+		for exaStr in excludeExact:
+			if exaStr == port:
+				validPort = False
+
+		if validPort:
+			ports.append(port)
+
+	return ports
 
 def uploadApp():
 	"""
 	Uploads application to target board
 	"""
 	os.system("make")
-	os.system("avrdude -p " + getBoard() + " -c arduino -P " + getPort() + " -U flash:w:dist/" + getConfig() + "/production/AVR.production.hex:i")
+
+	ports = getPorts()
+	for port in ports:
+		os.system("avrdude -p " + getBoard() + " -c arduino -P " + port + " -U flash:w:dist/" + getConfig() + "/production/AVR.production.hex:i")
+
+	if len(ports) == 0:
+		print("No valid ports found")
+
+def printHelp():
+	"""
+	Prints help for running commands
+	"""
+	runCommand = "python3 uploader.py"
+	print("Valid commands (flags can be upper or lower case):")
+	print("\t" + runCommand)
+	print("\t\tCompiles and uploads selected config to board")
+	print("\t" + runCommand + " -c")
+	print("\t\tSets configuration of project")
 
 if __name__ == '__main__':
-	#uploadApp()
-	setConfig()
+
+	if len(sys.argv) <= 1:
+		uploadApp()
+	elif len(sys.argv) == 2:
+		arg = sys.argv[1]
+		if arg == "-C" or arg == "-c":
+			setConfig()
+		else:
+			printHelp()
+	else:
+		printHelp()
